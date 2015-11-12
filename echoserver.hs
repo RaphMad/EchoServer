@@ -10,13 +10,15 @@ main :: IO ()
 main = withSocketsDo $ do
     -- create TCP socket at port supplied port or 4242 if no argument was supplied
     args <- getArgs
-    serverSocket <- listenOn . PortNumber $ args `headOr` 4242
+    let port = parsePort args 4242
+    serverSocket <- listenOn $ PortNumber port
     -- accept new clients in an endless loop
     forever $ acceptClient serverSocket
-    where
-      headOr :: [String] -> Int -> PortNumber
-      headOr list orValue = fromIntegral (if null list then orValue else read $ head list)
 
+parsePort :: [String] -> Int -> PortNumber
+parsePort (x : _) _ | not $ null parsed = fromIntegral . fst . head $ parsed
+   where parsed = reads x :: [(Int, String)]
+parsePort _ defaultPort                 = fromIntegral defaultPort
 
 acceptClient :: Socket -> IO ()
 acceptClient serverSocket = do
