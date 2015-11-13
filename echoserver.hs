@@ -1,6 +1,7 @@
 import Control.Concurrent
+import Control.Exception
 import Control.Monad
-import Data.ByteString.Char8 hiding(head, null)
+import qualified Data.ByteString.Char8 as C8
 import Network hiding (accept)
 import Network.Socket hiding (recv)
 import Network.Socket.ByteString
@@ -10,22 +11,18 @@ main :: IO ()
 main = withSocketsDo $ do
     -- create TCP socket at port supplied port or 4242 if no argument was supplied
     args <- getArgs
-    let port = parsePort args 4242
+    let port = tryParsePort args `orElse` 4242
     serverSocket <- listenOn $ PortNumber port
-    -- accept new clients in an endless loop
+    -- accept new clients in an endless loop ('forever')
     forever $ acceptClient serverSocket
-
-parsePort :: [String] -> Int -> PortNumber
-parsePort (x : _) _ | not $ null parsed = fromIntegral . fst . head $ parsed
-   where parsed = reads x :: [(Int, String)]
-parsePort _ defaultPort                 = fromIntegral defaultPort
 
 acceptClient :: Socket -> IO ()
 acceptClient serverSocket = do
     -- accept new client
     (clientSocket, _) <- accept serverSocket
-    -- handle client forever in a separate thread (spawned by 'forkIO')
-    let clientHandler = forever $ echo clientSocket
+    -- handle client in a separate thread (spawned by 'forkIO')
+    -- do this 'forever', but stop when an exception occurs (e.g. because client socket is closed)
+    let clientHandler = returnOnException . forever $ echo clientSocket
     void . forkIO $ clientHandler
 
 echo :: Socket -> IO ()
@@ -33,5 +30,16 @@ echo sock = do
    -- read chunk of max 4096 bytes
    message <- recv sock 4096
    -- respond with 'echo: ' prefix
-   let response = pack "echo: " `append` message
+   let response = C8.pack "echo: " `C8.append` message
    void $ sendAll sock response
+
+tryParsePort :: [String] -> Maybe PortNumber
+tryParsePort (x : _) = Just $ fromIntegral (read x :: Int)
+tryParsePort _       = Nothing
+
+orElse :: Maybe a -> a -> a
+orElse (Just a) _ = a
+orElse _ e        = e
+
+returnOnException :: IO () -> IO ()
+returnOnException = handle (\(SomeException _) -> return ())
