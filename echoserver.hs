@@ -9,7 +9,7 @@ import System.Environment
 
 main :: IO ()
 main = withSocketsDo $ do
-    -- create TCP socket at port supplied port or 4242 if no argument was supplied
+    -- create TCP socket at supplied port or '4242' if parsing fails
     args <- getArgs
     let port = tryParsePort args `orElse` 4242
     serverSocket <- listenOn $ PortNumber port
